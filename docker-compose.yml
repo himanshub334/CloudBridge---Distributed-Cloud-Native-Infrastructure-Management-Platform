@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cloudbridge
+      POSTGRES_USER: cloudbridge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports: ["5432:5432"]
+    volumes: [cloudbridge-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudbridge -d cloudbridge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  api:
+    build: ./api
+    environment:
+      API_PORT: 8080
+      DATABASE_URL: postgres://cloudbridge:${POSTGRES_PASSWORD:-change-me}@postgres:5432/cloudbridge?sslmode=disable
+      REDIS_ADDR: redis:6379
+      QUEUE_MODE: ${QUEUE_MODE:-local}
+      SQS_QUEUE_URL: ${SQS_QUEUE_URL:-}
+    ports: ["8080:8080"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+  worker:
+    build: ./worker
+    environment:
+      DRY_RUN: ${DRY_RUN:-true}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    ports: ["8001:8001"]
+  frontend:
+    build: ./frontend
+    ports: ["5173:80"]
+    depends_on: [api]
+volumes:
+  cloudbridge-data:
